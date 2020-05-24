@@ -1,6 +1,6 @@
 // This solver is under MIT License (c) DomNomNom 2020
 
-const delay = .1;  // seconds between receiving input and sending move.
+const minSolveMs = 100;  // milliseconds between receiving input and sending move.
 
 
 // In this file, unless otherwise stated, `move` and `board` are the arrays like they get serialized.
@@ -26,7 +26,9 @@ for (let src=0; src<LEN; ++src) {
     toAdj.push(adj);
 }
 
+
 function findNextMove(board) {
+    // Exhaustive check.
     for (let i=0; i<LEN; ++i) {
         for (const j of toAdj[i]) {
             if (board[i] == board[j]) {
@@ -38,9 +40,11 @@ function findNextMove(board) {
 }
 
 
+// ================= Interaction with index.js below ====================
+
 function sendMove(move) {
-    updateUI(move);
     socket.send(JSON.stringify(move));  // Note: global socket object.
+    updateUI(move);
 }
 
 function getGlobalCell(i) {
@@ -56,21 +60,28 @@ function updateUI(move) {
 }
 
 function solve_main() {
-    socket.addEventListener('message', e => {
+    socket.addEventListener('message', e => {  // Note: global socket object.
         const solveTime0 = new Date();
         const board = JSON.parse(e.data);
         const move = findNextMove(board);
-        if (move.length < 2) return;
+        if (!move || move.length < 2) return;
         const solveTime1 = new Date();
         const solveDurationMs = solveTime1-solveTime0;
-        console.log(`found move ${move} in ${solveDurationMs}ms.`)
-        const waitDurationMs = delay*1000 - solveDurationMs;
+        console.table([{move: JSON.stringify(move), ms:solveDurationMs}]);
+        const waitDurationMs = minSolveMs - solveDurationMs;
         setTimeout(sendMove, waitDurationMs, move);
     });
 }
+
+// Hook into the game
 const wrappedNewGame = newGame;
 newGame = () => {
     wrappedNewGame();
     solve_main();
 }
 solve_main();
+
+gameOver = () => {
+    // no alert()!
+    console.log(`Game over. Your score: ${score}`);
+};

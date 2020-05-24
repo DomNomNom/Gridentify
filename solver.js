@@ -39,11 +39,6 @@ function findNextMove(board) {
 
 
 function sendMove(move) {
-    // for (const row of board) {  // Note: global board object.
-    //     for (const cell of row) {
-    //         cell.value = "?";  // hack to allow it to be overwitten when the new results come back.
-    //     }
-    // }
     updateUI(move);
     socket.send(JSON.stringify(move));  // Note: global socket object.
 }

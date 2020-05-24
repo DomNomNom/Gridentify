@@ -1,3 +1,5 @@
+// This solver is under MIT License (c) DomNomNom 2020
+
 const delay = .1;  // seconds between receiving input and sending move.
 
 

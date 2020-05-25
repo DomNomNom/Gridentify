@@ -26,17 +26,76 @@ for (let src=0; src<LEN; ++src) {
     toAdj.push(adj);
 }
 
+const maxRngBranchFactor = 27;
+const lenToRng = [[], [[1],[2],[3]]];  // sizeOfRng => possibilities
+for (let moveLen=2; moveLen<=WD*HT; ++moveLen) {
+    const next = [];
+    if (lenToRng[moveLen-1].length*3 <= maxRngBranchFactor) {
+        for (const existing of lenToRng[moveLen-1]) {
+            next.push([...existing, 1]);
+            next.push([...existing, 2]);
+            next.push([...existing, 3]);
+        }
+    } else {
+        for (const existing of lenToRng[moveLen-1]) {
+            next.push([...existing, Math.floor(Math.random() * 3) + 1]);  // lol non-determinism starts here.
+        }
+    }
+    lenToRng.push(next);
+}
 
-function findNextMove(board) {
-    // Exhaustive check.
-    for (let i=0; i<LEN; ++i) {
-        for (const j of toAdj[i]) {
-            if (board[i] == board[j]) {
-                return [i,j];
+const boardType = Uint16Array;  // We do things with buffers to allocate memory less often.
+function getRngOutcomes(startingBoard, move) {
+    const sizeOfRng = len(move)-1;
+    const rng = lenToRng[sizeOfRng];
+    const numOutputs = rng.length;
+    const buf = new ArrayBuffer(numOutputs * LEN * boardType.BYTES_PER_ELEMENT);
+
+    const lastPos = move[move.length-1]
+    return rng.map((choices, i) => {
+        const board = new boardType(buf, i * LEN * boardType.BYTES_PER_ELEMENT, LEN);
+        for (let i=0; i<LEN; ++i) {
+            board[i] = startingBoard[i];
+        }
+        for (let i=0; i<move.length-1; ++i) {
+            board[move[i]] = rng[i];
+        }
+        board[lastPos] = move.length * board[lastPos];
+        debugger
+        return board
+    });
+}
+
+// TODO: heuristic
+
+// Returns all possible moves for the given board.
+function generateMoves(board) {
+    const out = [];
+    for (let start=0; start<LEN; ++start) {
+        const val = board[start];
+        const q = [[start]];  // bfs queue. oops, it's actually a stack lol, so we're doing dfs.
+        while (q.length) {
+            const move = q.pop();  // note: in js pop() is from the highest index
+            adjLoop:
+            for (const adj of toAdj[move[move.length-1]]) {
+                if (board[adj] != val) continue;  // exclude chains to other values.
+                // exclude loops.
+                for (let i=move.length-1; i>=0; --i) {  // potentially O(N^2) but these are usually short.
+                    if (move[i] == adj) continue adjLoop;
+                }
+                const newMove = [...move, adj];
+                out.push(newMove);
+                q.push(newMove);
             }
         }
     }
-    return [];
+    return out;
+}
+
+function findNextMove(board) {
+    const moves = generateMoves(board);
+    if (moves.length == 0) return null;
+    return moves[Math.floor(Math.random()*moves.length)];
 }
 
 
@@ -62,12 +121,12 @@ function updateUI(move) {
 function solve_main() {
     socket.addEventListener('message', e => {  // Note: global socket object.
         const solveTime0 = new Date();
-        const board = JSON.parse(e.data);
+        const board = new boardType(JSON.parse(e.data));
         const move = findNextMove(board);
         if (!move || move.length < 2) return;
         const solveTime1 = new Date();
         const solveDurationMs = solveTime1-solveTime0;
-        console.table([{move: JSON.stringify(move), ms:solveDurationMs}]);
+        console.table([{board: [...board].join(','), move: JSON.stringify(move), ms:solveDurationMs}]);
         const waitDurationMs = minSolveMs - solveDurationMs;
         setTimeout(sendMove, waitDurationMs, move);
     });

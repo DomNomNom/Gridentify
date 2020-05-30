@@ -1,6 +1,6 @@
 // This solver is under MIT License (c) DomNomNom 2020
 
-const minSolveMs = 100;  // milliseconds between receiving input and sending move.
+const minSolveMs = 10;  // milliseconds between receiving input and sending move.
 
 
 // In this file, unless otherwise stated, `move` and `board` are the arrays like they get serialized.
@@ -25,6 +25,7 @@ for (let src=0; src<LEN; ++src) {
     if (src < (HT-1)*WD) adj.push(src+WD); // down
     toAdj.push(adj);
 }
+const toBiggerAdj = toAdj.map((adjacents, i) => adjacents.filter(j => j > i));
 
 const maxRngBranchFactor = 27;
 const lenToRng = [[], [[1],[2],[3]]];  // sizeOfRng => possibilities
@@ -46,7 +47,7 @@ for (let moveLen=2; moveLen<=WD*HT; ++moveLen) {
 
 const boardType = Uint16Array;  // We do things with buffers to allocate memory less often.
 function getRngOutcomes(startingBoard, move) {
-    const sizeOfRng = len(move)-1;
+    const sizeOfRng = move.length-1;
     const rng = lenToRng[sizeOfRng];
     const numOutputs = rng.length;
     const buf = new ArrayBuffer(numOutputs * LEN * boardType.BYTES_PER_ELEMENT);
@@ -61,12 +62,10 @@ function getRngOutcomes(startingBoard, move) {
             board[move[i]] = rng[i];
         }
         board[lastPos] = move.length * board[lastPos];
-        debugger
         return board
     });
 }
 
-// TODO: heuristic
 
 // Returns all possible moves for the given board.
 function generateMoves(board) {
@@ -92,10 +91,68 @@ function generateMoves(board) {
     return out;
 }
 
+function heuristic(board) {
+    const cellValHeuristic = board.reduce((total, val) => {
+        switch (val){
+        case 1:
+        case 2:
+        case 3:  return total + 5;
+        case 4:  return total + 4;
+        case 5:  return total + 1;
+        case 6:  return total + 6;
+        case 7:  return total + 0;
+        case 8:  return total + 1;
+        case 9:  return total + 4;
+        case 10: return total + 1;
+        case 11: return total + 0;
+        case 12: return total + 9;
+        case 18: return total + 6;
+        case 36: return total + 9;
+        default: return total + (val<36)? 0 : val;
+        }
+    }, 0);
+
+    const adjacencyHeuristic = board.reduce((total, val, i) => {
+        let hasSame = false;
+        let hasMultiple = false;
+        for (const j of toBiggerAdj[i]) {
+            const vi = board[i];
+            const vj = board[j];
+            const bot = Math.min(vi, vj);
+            const top = Math.max(vi, vj);
+            switch (top / bot) {
+                case 1:
+                    hasSame = true;
+                    break;
+                case 2:
+                case 3:
+                // case 4:
+                    hasMultiple = true;
+                    break;
+            }
+        }
+        return total + val*(hasSame + hasMultiple);
+    }, 0);
+    return cellValHeuristic + 10*adjacencyHeuristic;
+}
+
 function findNextMove(board) {
     const moves = generateMoves(board);
     if (moves.length == 0) return null;
-    return moves[Math.floor(Math.random()*moves.length)];
+    let bestEV = 0;  // expected value
+    let bestMove = moves[0];
+    moves.forEach(move => {
+        let ev = Infinity;
+        const outcomes = getRngOutcomes(board, move);
+        for (const outcome of outcomes) {
+            ev = Math.min(ev, heuristic(outcome));
+        }
+        if (ev > bestEV) {
+            bestEV = ev;
+            bestMove = move;
+        }
+    })
+    return bestMove;
 }
 
 
